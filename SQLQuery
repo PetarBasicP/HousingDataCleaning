@@ -1,0 +1,90 @@
+select * from NashvilleHousing
+
+--Fixing the format of the SaleDate field to regular Date by adding a new field and then repopulating it with the update command
+--bcs updating it initially with Convert doesn't work for some reason
+alter table NashvilleHousing
+add SaleDateConverted date
+
+update NashvilleHousing
+set SaleDateConverted = convert(date,SaleDate)
+
+--Adding the values to the PropertyAddress field where there are NULLs
+--When the ParcelID values repeat, so do the PropertyAddress values, but there is always a UniqueID even when the ParcelID values
+--repeat. This means we can join two NashvilleHousing tables together when the ParcelID is the same but UniqueID isn't, in hopes 
+--that one of the instances of the values will have a PropertyAddress. There we join them, select the values we want and create an 
+--ISNULL field which will populate itself with the value that contains the PropertyAddress. Then we just copy that value to 
+--the first table with the UPDATE command. 
+select a.ParcelID, a.PropertyAddress, b.ParcelID, b.PropertyAddress, ISNULL(a.PropertyAddress, b.PropertyAddress)
+from NashvilleHousing a
+join NashvilleHousing b
+on a.ParcelID = b.ParcelID
+and a.[UniqueID ] <> b.[UniqueID ]
+where a.PropertyAddress is null
+
+update a
+set PropertyAddress = ISNULL(a.PropertyAddress, b.PropertyAddress)
+from NashvilleHousing a
+join NashvilleHousing b
+on a.ParcelID = b.ParcelID
+and a.[UniqueID ] <> b.[UniqueID ]
+where a.PropertyAddress is null
+
+--Breaking out Property Address into individual columns with SUBSTRING and CHARINDEX commands
+alter table NashvilleHousing
+add PropertySplitAddress nvarchar(50)
+
+update NashvilleHousing
+set PropertySplitAddress = SUBSTRING(PropertyAddress, 1, CHARINDEX(',', PropertyAddress)-1)
+
+alter table NashvilleHousing
+add PropertySplitCity nvarchar(50)
+
+update NashvilleHousing
+set PropertySplitCity = SUBSTRING(PropertyAddress, CHARINDEX(',', PropertyAddress)+2,20)
+
+--Breaking out Owner Address with the PARSENAME command
+--We did this with the PARSENAME command and with REPLACE because the PARSENAME works with dots (.) so we needed to replace that 
+--first in order to be able to use te PARSENAME command
+select parsename(Replace(OwnerAddress,',','.'),3),
+parsename(Replace(OwnerAddress,',','.'),2),
+parsename(Replace(OwnerAddress,',','.'),1)
+from NashvilleHousing
+
+alter table NashvilleHousing
+add OwnerSplitAddress nvarchar(50)
+
+update NashvilleHousing
+set OwnerSplitAddress = parsename(Replace(OwnerAddress,',','.'),3)
+
+alter table NashvilleHousing
+add OwnerSplitCity nvarchar(50)
+
+update NashvilleHousing
+set OwnerSplitCity = parsename(Replace(OwnerAddress,',','.'),2)
+
+alter table NashvilleHousing
+add OwnerSplitState nvarchar(50)
+
+update NashvilleHousing
+set OwnerSplitState = parsename(Replace(OwnerAddress,',','.'),1)
+
+
+--Change Y and N to Yes and No in the SoldAsVacant field
+--The first command is just a check
+select distinct(SoldAsVacant), count(SoldAsVacant)
+from NashvilleHousing
+group by SoldAsVacant
+order by 2 desc
+
+update NashvilleHousing
+set SoldAsVacant = 'No' where SoldAsVacant = 'N'
+
+update NashvilleHousing
+set SoldAsVacant = 'Yes' where SoldAsVacant = 'Y'
+
+
+--Remove Unused Columns
+select * from NashvilleHousing
+
+alter table NashvilleHousing
+drop column OwnerAddress, TaxDistrict, PropertyAddress, SaleDate
